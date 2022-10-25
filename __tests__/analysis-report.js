@@ -51,7 +51,7 @@ describe('analysis spec', () => {
         totalAmountEarned: 24508.77,
       },
     });
-  }, 100000);
+  });
 });
 
 describe('driver report', () => {
