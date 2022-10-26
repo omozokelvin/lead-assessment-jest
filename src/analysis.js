@@ -1,4 +1,4 @@
-const { getTrips, getDriver } = require('api');
+const { getTrips, getDriver, getDrivers } = require('api');
 const { normalizeAmount } = require('./utils');
 
 /**
@@ -7,102 +7,135 @@ const { normalizeAmount } = require('./utils');
  * @returns {any} Trip data analysis
  */
 async function analysis() {
-  const trips = await getTrips();
+  return getTrips().then((trips) => {
+    let tripDrivers = [];
 
-  let noOfCashTrips = 0;
-  let noOfNonCashTrips = 0;
-  let billedTotal = 0;
-  let cashBilledTotal = 0;
-  let nonCashBilledTotal = 0;
+    let noOfCashTrips = 0;
+    let noOfNonCashTrips = 0;
+    let billedTotal = 0;
+    let cashBilledTotal = 0;
+    let nonCashBilledTotal = 0;
 
-  const driversWithMoreThanOneVehicle = new Set();
+    for (const trip of trips) {
+      const normalizedAmount = normalizeAmount(trip.billedAmount);
 
-  let driversDetails = [];
-
-  for (const trip of trips) {
-    const normalizedAmount = normalizeAmount(trip.billedAmount);
-    if (trip.isCash) {
-      noOfCashTrips++;
-      cashBilledTotal += normalizedAmount;
-    }
-
-    if (!trip.isCash) {
-      noOfNonCashTrips++;
-      nonCashBilledTotal += normalizedAmount;
-    }
-
-    billedTotal += normalizedAmount;
-
-    try {
-      const driver = await getDriver(trip.driverID);
-
-      if (driver.vehicleID.length > 1) {
-        driversWithMoreThanOneVehicle.add(trip.vehicleID);
+      if (trip.isCash) {
+        noOfCashTrips++;
+        cashBilledTotal += normalizedAmount;
       }
 
-      const foundIndex = driversDetails.findIndex(
-        (item) => item.driverID === trip.driverID,
+      if (!trip.isCash) {
+        noOfNonCashTrips++;
+        nonCashBilledTotal += normalizedAmount;
+      }
+
+      billedTotal += normalizedAmount;
+
+      const foundIndex = tripDrivers.findIndex(
+        (driver) => driver.id === trip.driverID,
       );
 
       if (foundIndex === -1) {
-        driversDetails.push({
-          driverID: trip.driverID,
-          name: driver.name,
-          email: driver.email,
-          phone: driver.phone,
+        tripDrivers.push({
+          id: trip.driverID,
           noOfTrips: 1,
           totalAmountEarned: normalizedAmount,
         });
       } else {
-        driversDetails[foundIndex].noOfTrips++;
-        driversDetails[foundIndex].totalAmountEarned =
-          driversDetails[foundIndex].totalAmountEarned + normalizedAmount;
+        tripDrivers[foundIndex].noOfTrips++;
+        tripDrivers[foundIndex].totalAmountEarned =
+          tripDrivers[foundIndex].totalAmountEarned + normalizedAmount;
       }
-    } catch (error) {
-      console.log('bad driver');
-    }
-  }
-
-  // const driverIdWithHighestTrips =
-  let highestTrips = 0;
-  let highestTripsDriverId = null;
-
-  let highestAmount = 0;
-  let highestAmountDriverId = null;
-
-  for (driver of driversDetails) {
-    if (highestTrips <= driver.noOfTrips) {
-      highestTripsDriverId = driver.driverID;
-      highestTrips = driver.noOfTrips;
     }
 
-    if (highestAmount <= driver.totalAmountEarned) {
-      highestAmountDriverId = driver.driverID;
-      highestAmount = driver.totalAmountEarned;
+    let tempMostTripsByDriver = {
+      driverID: null,
+      noOfTrips: 0,
+      totalAmountEarned: 0,
+    };
+
+    let tempHighestEarningDriver = {
+      driverID: null,
+      noOfTrips: 0,
+      totalAmountEarned: 0,
+    };
+
+    for (driver of tripDrivers) {
+      if (tempMostTripsByDriver.noOfTrips < driver.noOfTrips) {
+        tempMostTripsByDriver.driverID = driver.id;
+        tempMostTripsByDriver.noOfTrips = driver.noOfTrips;
+        tempMostTripsByDriver.totalAmountEarned = driver.totalAmountEarned;
+      }
+
+      if (
+        tempHighestEarningDriver.totalAmountEarned < driver.totalAmountEarned
+      ) {
+        tempHighestEarningDriver.driverID = driver.id;
+        tempHighestEarningDriver.noOfTrips = driver.noOfTrips;
+        tempHighestEarningDriver.totalAmountEarned = driver.totalAmountEarned;
+      }
     }
-  }
 
-  const mostTripsByDriver = driversDetails.find(
-    ({ driverID }) => driverID === highestTripsDriverId,
-  );
+    return getDrivers().then((drivers) => {
+      const filteredDrivers = [];
 
-  const highestEarningDriver = driversDetails.find(
-    ({ driverID }) => driverID === highestAmountDriverId,
-  );
+      let noOfDriversWithMoreThanOneVehicle = 0;
 
-  delete mostTripsByDriver.driverID;
-  delete highestEarningDriver.driverID;
+      let mostTripsByDriver = {};
+      let highestEarningDriver = {};
 
-  return {
-    noOfCashTrips,
-    noOfNonCashTrips,
-    billedTotal,
-    cashBilledTotal,
-    nonCashBilledTotal,
-    noOfDriversWithMoreThanOneVehicle: driversWithMoreThanOneVehicle.size,
-    mostTripsByDriver,
-    highestEarningDriver,
-  };
+      const tripDriverIDS = tripDrivers.map((item) => item.id);
+
+      for (const [driverId, driverObj] of Object.entries(drivers)) {
+        if (tripDriverIDS.includes(driverId)) {
+          filteredDrivers.push({
+            id: driverId,
+            name: driverObj.name,
+            phone: driverObj.phone,
+            vehicleID: driverObj.vehicleID,
+          });
+
+          if (driverObj.vehicleID.length > 1) {
+            noOfDriversWithMoreThanOneVehicle++;
+          }
+
+          if (driverId === tempMostTripsByDriver.driverID) {
+            mostTripsByDriver.name = driverObj.name;
+            mostTripsByDriver.email = driverObj.email;
+            mostTripsByDriver.phone = driverObj.phone;
+
+            mostTripsByDriver.noOfTrips = tempMostTripsByDriver.noOfTrips;
+            mostTripsByDriver.totalAmountEarned =
+              tempMostTripsByDriver.totalAmountEarned;
+          }
+
+          if (driverId === tempHighestEarningDriver.driverID) {
+            highestEarningDriver.name = driverObj.name;
+            highestEarningDriver.email = driverObj.email;
+            highestEarningDriver.phone = driverObj.phone;
+            highestEarningDriver.noOfTrips = tempHighestEarningDriver.noOfTrips;
+            highestEarningDriver.totalAmountEarned =
+              tempHighestEarningDriver.totalAmountEarned;
+          }
+        }
+      }
+
+      const payload = {
+        noOfCashTrips,
+        noOfNonCashTrips,
+        billedTotal: +billedTotal.toFixed(2),
+        cashBilledTotal: +cashBilledTotal.toFixed(2),
+        nonCashBilledTotal: +nonCashBilledTotal.toFixed(2),
+        noOfDriversWithMoreThanOneVehicle,
+        mostTripsByDriver,
+        highestEarningDriver,
+      };
+
+      // console.log('payload => ', payload);
+
+      return payload;
+    });
+  });
 }
 
 module.exports = analysis;

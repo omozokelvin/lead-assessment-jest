@@ -66,6 +66,9 @@ async function driverReport() {
       noOfCashTrips,
       noOfNonCashTrips,
       trips: [...filteredTrips],
+      totalAmountEarned,
+      totalCashAmount,
+      totalNonCashAmount,
     });
   }
 
