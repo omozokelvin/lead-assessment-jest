@@ -54,8 +54,8 @@ describe('analysis spec', () => {
   });
 });
 
-// describe('driver report', () => {
-//   test('matches the required data format', async () => {
-//     return expect(driverReport()).resolves.toEqual(report);
-//   });
-// });
+describe('driver report', () => {
+  test('matches the required data format', async () => {
+    return expect(driverReport()).resolves.toEqual(report);
+  });
+});

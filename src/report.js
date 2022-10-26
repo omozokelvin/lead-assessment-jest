@@ -1,4 +1,10 @@
-const { getTrips, getDriver, getVehicle, getDrivers } = require('api');
+const {
+  getTrips,
+  getDriver,
+  getVehicle,
+  getDrivers,
+  getVehicles,
+} = require('api');
 const { normalizeAmount } = require('./utils');
 
 /**
@@ -7,74 +13,75 @@ const { normalizeAmount } = require('./utils');
  * @returns {any} Driver report data
  */
 async function driverReport() {
-  const drivers = await getDrivers();
-  const trips = await getTrips();
+  return Promise.all([getDrivers(), getTrips(), getVehicles()]).then(
+    ([drivers, trips, vehicles]) => {
+      const driverReports = [];
 
-  const driverReports = [];
+      for (const [driverId, driverObj] of Object.entries(drivers)) {
+        let noOfCashTrips = 0;
+        let noOfNonCashTrips = 0;
+        let totalAmountEarned = 0;
+        let totalCashAmount = 0;
+        let totalNonCashAmount = 0;
 
-  for (const [driverId, driverObj] of Object.entries(drivers)) {
-    const vehicles = [];
+        const filteredTrips = trips
+          .filter((trip) => trip.driverID === driverId)
+          .map((trip) => {
+            const normalizedAmount = normalizeAmount(trip.billedAmount);
 
-    for (const vehicleId of driverObj.vehicleID) {
-      const vehicle = await getVehicle(vehicleId);
+            if (trip.isCash) {
+              noOfCashTrips++;
+              totalCashAmount += normalizedAmount;
+            }
 
-      vehicles.push({
-        plate: vehicle.plate,
-        manufacturer: vehicle.manufacturer,
-      });
-    }
+            if (!trip.isCash) {
+              noOfNonCashTrips++;
+              totalNonCashAmount += normalizedAmount;
+            }
 
-    let noOfCashTrips = 0;
-    let noOfNonCashTrips = 0;
-    let totalAmountEarned = 0;
-    let totalCashAmount = 0;
-    let totalNonCashAmount = 0;
+            totalAmountEarned += normalizedAmount;
 
-    const filteredTrips = trips
-      .filter((trip) => trip.driverID === driverId)
-      .map((trip) => {
-        const normalizedAmount = normalizeAmount(trip.billedAmount);
+            return {
+              user: trip.user.name,
+              created: trip.created,
+              pickup: trip.pickup.address,
+              destination: trip.destination.address,
+              billed: +normalizedAmount.toFixed(2),
+              isCash: trip.isCash,
+            };
+          });
 
-        if (trip.isCash) {
-          noOfCashTrips++;
-          totalCashAmount += normalizedAmount;
+        const filteredVehicles = [];
+
+        for (const vehicleId of driverObj.vehicleID) {
+          const vehicle = vehicles[vehicleId];
+
+          filteredVehicles.push({
+            plate: vehicle.plate,
+            manufacturer: vehicle.manufacturer,
+          });
         }
 
-        if (!trip.isCash) {
-          noOfNonCashTrips++;
-          totalNonCashAmount += normalizedAmount;
-        }
+        driverReports.push({
+          fullName: driverObj.name,
+          phone: driverObj.phone,
+          id: driverId,
+          vehicles: [...filteredVehicles],
+          noOfTrips: filteredTrips.length,
+          noOfCashTrips,
+          noOfNonCashTrips,
+          trips: [...filteredTrips],
+          totalAmountEarned: +totalAmountEarned.toFixed(2),
+          totalCashAmount: +totalCashAmount.toFixed(2),
+          totalNonCashAmount: +totalNonCashAmount.toFixed(2),
+        });
+      }
 
-        totalAmountEarned += normalizedAmount;
+      // console.log('driver reports -> ', driverReports);
 
-        return {
-          user: trip.user.name,
-          created: trip.created,
-          pickup: trip.pickup.address,
-          destination: trip.destination.address,
-          billed: normalizedAmount,
-          isCash: trip.isCash,
-        };
-      });
-
-    driverReports.push({
-      name: driverObj.name,
-      phone: driverObj.phone,
-      id: driverId,
-      vehicles: [...vehicles],
-      noOfTrips: filteredTrips.length,
-      noOfCashTrips,
-      noOfNonCashTrips,
-      trips: [...filteredTrips],
-      totalAmountEarned,
-      totalCashAmount,
-      totalNonCashAmount,
-    });
-  }
-
-  console.log('driver -> ', driverReports);
-
-  return driverReports;
+      return driverReports;
+    },
+  );
 }
 
 module.exports = driverReport;
